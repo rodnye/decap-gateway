@@ -1,77 +1,414 @@
-# TypeScript Library Starter
+# decap-gateway
 
-![NPM](https://img.shields.io/npm/l/@gjuchault/typescript-library-starter)
-![NPM](https://img.shields.io/npm/v/@gjuchault/typescript-library-starter)
-![GitHub Workflow Status](https://github.com/gjuchault/typescript-library-starter/actions/workflows/typescript-library-starter.yml/badge.svg?branch=main)
+Client that replicates the [Decap CMS](https://decapcms.org/) internal flow against [DecapBridge](https://decapbridge.com/)-compatible gateways.
 
-Yet another (opinionated) TypeScript library starter template.
+Created to allow custom implementations without depending on the full Decap CMS bundle.
 
-If you're looking for a backend service starter, check out my [typescript-service-starter](https://github.com/gjuchault/typescript-service-starter)
+Manages authentication, tree operations, blob manipulation, commits, and media persistence against a GitHub repository through a proxied API.
 
-## Opinions and limitations
+> [!IMPORTANT]
+> Current only support Github Provider.
 
-1. Relies as much as possible on each included library's defaults
-2. Only relies on GitHub Actions
-3. Does not include documentation generation
+## Install
 
-## Getting started
+```bash
+npm install @rodny/decap-gateway
+```
 
-1. `npx degit gjuchault/typescript-library-starter my-project` or click on the `Use this template` button on GitHub!
-2. `cd my-project`
-3. `npm install`
-4. `git init` (if you used degit)
-5. `node --run setup`
+## Quick start
 
-To enable deployment, you will need to:
+```ts
+import { DecapGateway } from "@rodny/decap-gateway";
 
-1. Set up the `NPM_TOKEN` secret in GitHub Actions ([Settings > Secrets > Actions](https://github.com/gjuchault/typescript-library-starter/settings/secrets/actions))
-2. Give `GITHUB_TOKEN` write permissions for GitHub releases ([Settings > Actions > General](https://github.com/gjuchault/typescript-library-starter/settings/actions) > Workflow permissions)
+const gateway = new DecapGateway({
+  identityUrl: "https://auth.decapbridge.com/sites/xxxxxx-xxxxxx-xxxxxx-xxxxxx",
+  gatewayUrl: "https://gateway.decapbridge.com",
 
-## Features
+  repo: "owner/repo",
+  branch: "main",
+});
 
-### Node.js, npm version
+const user = await gateway.login("user@example.com", "xxxxxxxxx");
+const content = await gateway.operations.readFile("src/data/config.json");
+```
 
-TypeScript Library Starter relies on [Volta](https://volta.sh/) to ensure the Node.js version is consistent across developers. It's also used in the GitHub workflow file.
+## Configuration
 
-### TypeScript
+```ts
+interface GatewayConfig {
+  identityUrl: string; // Netlify Identity endpoint (recommended DecapBridge)
+  gatewayUrl: string; // Git gateway URL
+  repo: string; // GitHub repo (owner/name)
+  branch?: string; // Default branch (default: "main")
+  commitMessages?: CommitMessages;
+}
+```
 
-Leverages [Typescript 7](https://github.com/microsoft/typescript-go) for blazing-fast builds and type-checking.
-Generates a single ESM build.
+## GitOperations
 
-Commands:
+High-level interface for reading, listing, writing, and deleting files.
 
-- `build`: runs type checking, then ESM and `d.ts` files in the `build/` directory
-- `clean`: removes the `build/` directory
-- `type:check`: runs type checking
+### readFile
 
-### Tests
+```ts
+const raw = await gateway.operations.readFile("src/data/products/item.json");
+const data = JSON.parse(raw);
+```
 
-TypeScript Library Starter uses [Node.js's native test runner](https://nodejs.org/api/test.html). Coverage is done using [c8](https://github.com/bcoe/c8) but will switch to Node.js's one once out.
+### readFileSha
 
-Commands:
+```ts
+const sha = await gateway.operations.readFileSha("src/data/products/item.json");
+// "cc651297356949ec49a9cc7af4583de8ee74700b" or null
+```
 
-- `test`: runs test runner
-- `test:watch`: runs test runner in watch mode
-- `test:coverage`: runs test runner and generates coverage reports
+### listFiles
 
-### Format & lint
+```ts
+const files = await gateway.operations.listFiles("src/data/products");
+// [{ path: "src/data/products/item.json", sha: "cc6512..." }, ...]
+```
 
-This template relies on [Biome](https://biomejs.dev/) to do both formatting & linting in no time.
-It also uses [cspell](https://github.com/streetsidesoftware/cspell) to ensure correct spelling.
+### persistFiles
 
-Commands:
+Create or update files and commit in a single operation.
 
-- `lint`: runs Biome with automatic fixing
-- `lint:check`: runs Biome without automatic fixing (used in CI)
-- `spell:check`: runs spell checking
+```ts
+await gateway.operations.persistFiles(
+  [
+    {
+      path: "src/data/products/item.json",
+      content: JSON.stringify(data, null, 2),
+    },
+    { path: "src/data/products/other.json", content: '{"key":"value"}' },
+  ],
+  [],
+  {
+    commitMessage: 'data: update "item" - user via DecapBridge',
+    author: { name: "User", email: "user@example.com" },
+    branch: "main",
+  },
+);
+```
 
-### Releasing
+### deleteFiles
 
-Under the hood, this library uses [semantic-release](https://github.com/semantic-release/semantic-release) and [Commitizen](https://github.com/commitizen/cz-cli).
-The goal is to avoid manual release processes. Using `semantic-release` will automatically create a GitHub release (hence tags) as well as an npm release.
-Based on your commit history, `semantic-release` will automatically create a patch, feature, or breaking release.
+```ts
+await gateway.operations.deleteFiles(["src/data/products/obsolete.json"], {
+  commitMessage: 'data: delete "obsolete" - user via DecapBridge',
+  author: { name: "User", email: "user@example.com" },
+});
+```
 
-Commands:
+### createBranch
 
-- `cz`: interactive CLI that helps you generate a proper git commit message, using [Commitizen](https://github.com/commitizen/cz-cli)
-- `semantic-release`: triggers a release (used in CI)
+```ts
+await gateway.operations.createBranch("feature/new-items", "main");
+```
+
+### deleteBranch
+
+```ts
+await gateway.operations.deleteBranch("feature/new-items");
+```
+
+## DecapGateway
+
+Main entry point. Handles auth lifecycle and exposes operation layers.
+
+```ts
+const gateway = new DecapGateway(config);
+```
+
+### Methods
+
+| Method                   | Returns            | Description                         |
+| ------------------------ | ------------------ | ----------------------------------- |
+| `login(email, password)` | `AuthUser`         | Authenticate and initialize gateway |
+| `restore()`              | `AuthUser \| null` | Restore session from storage        |
+| `logout()`               | `void`             | Clear session                       |
+| `getToken()`             | `string`           | Get current JWT                     |
+
+### Properties
+
+| Property     | Type               | Description                |
+| ------------ | ------------------ | -------------------------- |
+| `operations` | `GitOperations`    | High-level file operations |
+| `github`     | `GitHubGatewayAPI` | Low-level git plumbing     |
+
+## GitHubGatewayAPI
+
+Low-level git plumbing. Maps directly to gateway endpoints.
+
+### Branches and refs
+
+```ts
+// GET /github/branches/{branch}
+const branch = await gateway.github.getBranch();
+// { commit: { sha: "..." }, protected: false }
+
+// GET /github/git/refs/{ref}
+const ref = await gateway.github.getRef("heads/main");
+
+// POST /github/git/refs
+await gateway.github.createRef("heads/new-branch", parentSha);
+
+// PATCH /github/git/refs/{ref}
+await gateway.github.patchRef("heads/main", commitSha);
+
+// DELETE /github/git/refs/{ref}
+await gateway.github.deleteRef("heads/old-branch");
+```
+
+### Trees
+
+```ts
+// List root tree: GET /github/git/trees/{branch}:
+const root = await gateway.github.listTree();
+// { sha: "...", tree: [{ path, type, sha, size }, ...] }
+
+// List subdirectory: GET /github/git/trees/{branch}:{encoded_path}
+const tree = await gateway.github.listTree("main", "src/data/products");
+
+// List recursively
+const full = await gateway.github.listTree("main", "", true);
+```
+
+### Blobs
+
+```ts
+// GET /github/git/blobs/{sha}
+const blob = await gateway.github.getBlob("cc65129735...");
+// { content: "base64...", encoding: "base64" }
+
+// POST /github/git/blobs
+const newBlob = await gateway.github.createBlob(base64Content, "base64");
+// { sha: "..." }
+```
+
+### Commits
+
+```ts
+// POST /github/git/trees
+const tree = await gateway.github.createTree(baseTreeSha, [
+  { path: "file.json", mode: "100644", type: "blob", sha: blobSha },
+]);
+
+// POST /github/git/commits
+const commit = await gateway.github.createCommit(
+  "data: update file",
+  tree.sha,
+  [parentSha],
+  { name: "Author", email: "author@example.com" },
+);
+```
+
+### Commit history
+
+```ts
+// GET /github/commits?path={file}&sha={branch}
+const history = await gateway.github.getCommits("src/data/categories.json");
+```
+
+### File content (composite)
+
+Reads a file by resolving tree entry then fetching blob.
+
+```ts
+const content = await gateway.github.getFileContent("src/data/config.json");
+```
+
+### File SHA lookup
+
+```ts
+const sha = await gateway.github.getFileSha("src/data/config.json");
+```
+
+### Pull requests
+
+```ts
+const pr = await gateway.github.createPullRequest(
+  "Update data",
+  "feature/x",
+  "main",
+);
+const prs = await gateway.github.getPullRequests("open");
+await gateway.github.mergePullRequest(pr.number, pr.head.sha);
+await gateway.github.closePullRequest(pr.number);
+```
+
+### Compare
+
+```ts
+const diff = await gateway.github.getCompare("main", "feature/x");
+```
+
+### Write access check
+
+```ts
+const canWrite = await gateway.github.hasWriteAccess();
+```
+
+## Examples
+
+## Example 1: Edit a product in a repo
+
+```ts
+import { DecapGateway } from "@rodny/decap-gateway";
+
+const gateway = new DecapGateway({
+  identityUrl: "https://auth.decapbridge.com/sites/xxxxxx-xxxxxx-xxxxxx-xxxxxx",
+  gatewayUrl: "https://gateway.decapbridge.com",
+  repo: "pepe/catalog",
+  branch: "dev",
+});
+
+await gateway.login("admin@example.com", "secret");
+
+// List products
+const files = await gateway.operations.listFiles("src/data/products");
+console.log(files.map((f) => f.path));
+
+// Read and modify
+const raw = await gateway.operations.readFile("src/data/products/chorizo.json");
+const product = JSON.parse(raw);
+product.price = 200;
+product.available = false;
+
+// Commit
+await gateway.operations.persistFiles(
+  [
+    {
+      path: "src/data/products/chorizo.json",
+      content: JSON.stringify(product, null, 2),
+    },
+  ],
+  [],
+  {
+    commitMessage: 'data: update "chorizo" - admin via @rodny/decap-gateway',
+    author: { name: "Admin", email: "admin@example.com" },
+  },
+);
+
+await gateway.logout();
+```
+
+### Example 2: Upload a image in browser
+
+```ts
+import { DecapGateway } from "@rodny/decap-gateway";
+
+const gw = new DecapGateway({
+  identityUrl: "https://auth.decapbridge.com/sites/xxxxxx-xxxxxx-xxxxxx-xxxxxx",
+  gatewayUrl: "https://gateway.decapbridge.com",
+  repo: "owner/repo",
+  branch: "main",
+});
+
+await gw.login("user@example.com", "password");
+
+const input = document.querySelector<HTMLInputElement>("#file-input");
+
+input.addEventListener("change", async () => {
+  const file = input.files[0];
+  if (!file) return;
+
+  // Convert File to base64
+  const buffer = await file.arrayBuffer();
+  const base64 = btoa(
+    new Uint8Array(buffer).reduce(
+      (data, byte) => data + String.fromCharCode(byte),
+      "",
+    ),
+  );
+
+  const destPath = `public/images/${file.name}`;
+
+  await gw.operations.persistFiles([{ path: destPath, content: base64 }], [], {
+    commitMessage: `data: upload "${destPath}" - ${gw.user.email} via @rodny/decap-gateway`,
+    author: { name: gw.user.email.split("@")[0], email: gw.user.email },
+    branch: "main",
+  });
+
+  console.log(`Uploaded: ${destPath}`);
+});
+```
+
+### Example 3: Upload a image in Node.js
+
+```ts
+import { DecapGateway } from "@rodny/decap-gateway";
+import { readFileSync } from "fs";
+
+const gw = new DecapGateway({
+  identityUrl: "https://your-site.netlify.app/.netlify/identity",
+  gatewayUrl: "https://gateway.decapbridge.com",
+  repo: "owner/repo",
+  branch: "main",
+});
+
+await gw.login("user@example.com", "password");
+
+const filePath = "./photo.png";
+const base64 = readFileSync(filePath).toString("base64");
+const destPath = "public/images/photo.png";
+
+await gw.operations.persistFiles([{ path: destPath, content: base64 }], [], {
+  commitMessage: `data: upload "${destPath}" - admin via @rodny/decap-gateway`,
+  author: { name: "Admin", email: "user@example.com" },
+  branch: "main",
+});
+
+console.log(`Uploaded: ${destPath}`);
+await gw.logout();
+```
+
+### Example 4: Downloading images
+
+```ts
+// Browser
+const tree = await gw.github.listTree("main", "public/images");
+const png = tree.tree.find((f) => f.path.endsWith(".png"));
+const blob = await gw.github.getBlob(png.sha);
+const bytes = Uint8Array.from(atob(blob.content), (c) => c.charCodeAt(0));
+const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
+
+// Node.js
+import { writeFileSync } from "fs";
+const buffer = Buffer.from(blob.content, "base64");
+writeFileSync(png.path.split("/").pop(), buffer);
+```
+
+### Example 5: Deleting files
+
+```ts
+await gw.operations.deleteFiles(["public/images/old-photo.png"], {
+  commitMessage:
+    'data: delete "public/images/old-photo.png" - admin via DecapBridge',
+  author: { name: "Admin", email: "user@example.com" },
+});
+```
+
+## Endpoint mapping
+
+| Library method              | HTTP   | Gateway path                        |
+| --------------------------- | ------ | ----------------------------------- |
+| `getSettings()`             | GET    | `/settings`                         |
+| `getBranch(b)`              | GET    | `/github/branches/{b}`              |
+| `getRef(r)`                 | GET    | `/github/git/refs/{r}`              |
+| `createRef(r, sha)`         | POST   | `/github/git/refs`                  |
+| `patchRef(r, sha)`          | PATCH  | `/github/git/refs/{r}`              |
+| `deleteRef(r)`              | DELETE | `/github/git/refs/{r}`              |
+| `getTree(ref)`              | GET    | `/github/git/trees/{ref}`           |
+| `createTree(base, entries)` | POST   | `/github/git/trees`                 |
+| `getBlob(sha)`              | GET    | `/github/git/blobs/{sha}`           |
+| `createBlob(content)`       | POST   | `/github/git/blobs`                 |
+| `createCommit(...)`         | POST   | `/github/git/commits`               |
+| `getCommits(path, sha)`     | GET    | `/github/commits?path=&sha=`        |
+| `listTree(branch, path)`    | GET    | `/github/git/trees/{branch}:{path}` |
+
+Tree ref format: `{branch}:{encodeURIComponent(path)}`. Use `{branch}:` for root.
+
+## License
+
+MIT
