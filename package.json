@@ -8,10 +8,10 @@
     "starter",
     "template"
   ],
-  "homepage": "https://github.com/rodnye/decap-cms-gateway",
-  "bugs": "https://github.com/rodnye/decap-cms-gateway/issues",
+  "homepage": "https://github.com/rodnye/decap-gateway",
+  "bugs": "https://github.com/rodnye/decap-gateway/issues",
   "author": "Rodny Estrada <rrodnyestrada1@gmail.com>",
-  "repository": "rodnye/decap-cms-gateway",
+  "repository": "rodnye/decap-gateway",
   "type": "module",
   "exports": "./build/index.js",
   "types": "./build/index.d.ts",
@@ -29,6 +29,7 @@
   },
   "scripts": {
     "setup": "node ./scripts/setup.ts",
+    "prepare": "rimraf build && tsgo --project tsconfig.build.json",
     "build": "rimraf build && tsgo --project tsconfig.build.json",
     "clean": "rimraf build coverage",
     "type:check": "tsgo --project tsconfig.json",
@@ -43,7 +44,7 @@
     "semantic-release": "semantic-release"
   },
 
-   "dependencies": {
+  "dependencies": {
     "gotrue-js": "^1.0.1"
   },
 
