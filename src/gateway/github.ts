@@ -1,5 +1,6 @@
 import type { GatewayClient } from "./client.ts";
 import type { TreeEntry, PullRequest, CommitAuthor } from "../types.ts";
+import { base64ToUtf8 } from "../utils.ts";
 
 export class GitHubGatewayAPI {
 	private client: GatewayClient;
@@ -103,7 +104,7 @@ export class GitHubGatewayAPI {
 		if (!entry) throw new Error(`File not found: ${path}`);
 		const blob = await this.getBlob(entry.sha);
 		if (blob.encoding === "base64") {
-			return atob(blob.content.replace(/\n/g, ""));
+			return base64ToUtf8(blob.content.replace(/\n/g, ""));
 		}
 		return blob.content;
 	}

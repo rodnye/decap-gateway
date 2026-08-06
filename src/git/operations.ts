@@ -1,5 +1,6 @@
 import type { GitHubGatewayAPI } from "../gateway/github.ts";
 import type { FileEntry, PersistOptions, TreeEntry } from "../types.ts";
+import { utf8ToBase64 } from "../utils.ts";
 
 export class GitOperations {
 	constructor(private api: GitHubGatewayAPI) {}
@@ -38,9 +39,7 @@ export class GitOperations {
 
 		for (const file of files) {
 			const content =
-				typeof file.content === "string"
-					? btoa(encodeURIComponent(file.content))
-					: "";
+				typeof file.content === "string" ? utf8ToBase64(file.content) : "";
 			const blob = await this.api.createBlob(content, "base64");
 			treeEntries.push({
 				path: file.path,
