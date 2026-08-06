@@ -1,0 +1,125 @@
+name: Typescript Library Starter
+
+on: [push]
+
+permissions:
+  id-token: write # Required for OIDC
+  contents: write
+
+jobs:
+  dependencies:
+    name: 📦 Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: npm ci
+
+  lint:
+    name: 🔬 Lint & Format
+    runs-on: ubuntu-latest
+    needs: [dependencies]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: npm ci
+      - name: 🔬 Lint & Format
+        run: node --run lint:check
+
+  audit:
+    name: 🛡️ Audit
+    runs-on: ubuntu-latest
+    needs: [dependencies]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - name: 🛡️ Audit
+        run: npm audit --audit-level=high
+
+  spell:
+    name: 🈸 Spellcheck
+    runs-on: ubuntu-latest
+    needs: [dependencies]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: npm ci
+      - name: 🈸 Spellcheck
+        run: node --run spell:check
+
+  type:
+    name: ʦ Typecheck
+    runs-on: ubuntu-latest
+    needs: [dependencies]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: npm ci
+      - name: ʦ Typecheck
+        run: node --run type:check
+
+  test:
+    name: ⚡ Tests
+    runs-on: ubuntu-latest
+    needs: [dependencies]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: npm ci
+      - name: ⚡ Tests
+        run: node --run test:coverage
+
+  test-setup:
+    name: ⚡ Setup tests
+    runs-on: ubuntu-latest
+    needs: [dependencies]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: npm ci
+      - name: ⚡ Tests
+        run: node --run test:setup
+
+  build-and-release:
+    name: 🚀 Build & release
+    needs: [lint, audit, spell, type, test, test-setup]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: npm ci
+      - name: 🔨 Build
+        run: node --run build
+      - name: 🚀 Release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node --run semantic-release
+
+      - name: 👀 Preview release
+        id: pack
+        if: github.ref != 'refs/heads/main'
+        run: echo "TARBALL=$(npm pack)" >> $GITHUB_OUTPUT
+
+      - name: 📦 Upload package
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: ${{ steps.pack.outputs.TARBALL }}
