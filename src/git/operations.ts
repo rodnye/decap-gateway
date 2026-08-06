@@ -19,7 +19,10 @@ export class GitOperations {
 		const tree: any = await this.api.listTree(branch, folder);
 		return (tree.tree || [])
 			.filter((f: any) => f.type === "blob")
-			.map((f: any) => ({ path: `${folder}/${f.path}`, sha: f.sha }));
+			.map((f: any) => ({
+				path: folder ? `${folder}/${f.path}` : f.path,
+				sha: f.sha,
+			}));
 	}
 
 	async persistFiles(
@@ -59,7 +62,7 @@ export class GitOperations {
 			options.author,
 		);
 
-		await this.api.patchRef(`heads/${branch}`, commit.sha);
+		await this.api.patchRef(`heads/${encodeURIComponent(branch!)}`, commit.sha);
 	}
 
 	async deleteFiles(paths: string[], options: PersistOptions): Promise<void> {
@@ -73,7 +76,7 @@ export class GitOperations {
 
 	async deleteBranch(branchName: string): Promise<void> {
 		try {
-			await this.api.deleteRef(`heads/${branchName}`);
+			await this.api.deleteRef(`heads/${encodeURIComponent(branchName)}`);
 		} catch {
 			// already deleted
 		}

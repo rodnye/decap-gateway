@@ -3,74 +3,66 @@ import type { TreeEntry, PullRequest, CommitAuthor } from "../types.ts";
 
 export class GitHubGatewayAPI {
 	private client: GatewayClient;
-	private repo: string;
 	private branch: string;
 	private commitAuthor: CommitAuthor;
 
 	constructor(
 		client: GatewayClient,
-		repo: string,
+		_repo: string,
 		branch: string,
 		commitAuthor: CommitAuthor,
 	) {
 		this.client = client;
-		this.repo = repo;
 		this.branch = branch;
 		this.commitAuthor = commitAuthor;
 	}
 
-	private repoPath(path = ""): string {
-		return `/repos/${this.repo}${path}`;
-	}
-
 	async getBranch(branch = this.branch) {
-		return this.client.request(
-			this.repoPath(`/branches/${encodeURIComponent(branch)}`),
-		);
+		return this.client.request(`/branches/${encodeURIComponent(branch)}`);
 	}
 
 	async getRef(ref: string) {
-		return this.client.request(this.repoPath(`/git/ref/${ref}`));
+		return this.client.request(`/git/refs/${ref}`);
 	}
 
 	async createRef(ref: string, sha: string) {
-		return this.client.request(this.repoPath("/git/refs"), {
+		return this.client.request("/git/refs", {
 			method: "POST",
 			body: JSON.stringify({ ref: `refs/${ref}`, sha }),
 		});
 	}
 
 	async patchRef(ref: string, sha: string, force = false) {
-		return this.client.request(this.repoPath(`/git/refs/${ref}`), {
+		return this.client.request(`/git/refs/${ref}`, {
 			method: "PATCH",
 			body: JSON.stringify({ sha, force }),
 		});
 	}
 
 	async deleteRef(ref: string) {
-		return this.client.request(this.repoPath(`/git/refs/${ref}`), {
+		return this.client.request(`/git/refs/${ref}`, {
 			method: "DELETE",
 		});
 	}
 
 	async getBlob(sha: string): Promise<{ content: string; encoding: string }> {
-		return this.client.request(this.repoPath(`/git/blobs/${sha}`));
+		return this.client.request(`/git/blobs/${sha}`);
 	}
 
 	async createBlob(content: string, encoding: "base64" | "utf-8" = "base64") {
-		return this.client.request(this.repoPath("/git/blobs"), {
+		return this.client.request("/git/blobs", {
 			method: "POST",
 			body: JSON.stringify({ content, encoding }),
 		});
 	}
 
-	async getTree(sha: string, recursive = false) {
+	async getTree(treeRef: string, recursive = false) {
 		const q = recursive ? "?recursive=1" : "";
-		return this.client.request(this.repoPath(`/git/trees/${sha}${q}`));
+		return this.client.request(`/git/trees/${treeRef}${q}`);
 	}
 
 	async createTree(baseSha: string | null, tree: TreeEntry[]) {
-		return this.client.request(this.repoPath("/git/trees"), {
+		return this.client.request("/git/trees", {
 			method: "POST",
 			body: JSON.stringify({
 				...(baseSha ? { base_tree: baseSha } : {}),
@@ -85,7 +77,7 @@ export class GitHubGatewayAPI {
 		parents: string[],
 		author?: CommitAuthor,
 	) {
-		return this.client.request(this.repoPath("/git/commits"), {
+		return this.client.request("/git/commits", {
 			method: "POST",
 			body: JSON.stringify({
 				message,
@@ -100,14 +92,20 @@ export class GitHubGatewayAPI {
 	}
 
 	async getFileContent(path: string, branch = this.branch): Promise<string> {
-		const encoded = encodeURIComponent(path);
-		const res: any = await this.client.request(
-			this.repoPath(`/contents/${encoded}?ref=${encodeURIComponent(branch)}`),
+		const parts = path.split("/");
+		const filename = parts.pop()!;
+		const dir = parts.join("/");
+		const treeRef = dir ? `${branch}:${encodeURIComponent(dir)}` : `${branch}:`;
+		const tree: any = await this.getTree(treeRef);
+		const entry = (tree.tree || []).find(
+			(f: any) => f.path === filename && f.type === "blob",
 		);
-		if (res.encoding === "base64") {
-			return atob(res.content.replace(/\n/g, ""));
+		if (!entry) throw new Error(`File not found: ${path}`);
+		const blob = await this.getBlob(entry.sha);
+		if (blob.encoding === "base64") {
+			return atob(blob.content.replace(/\n/g, ""));
 		}
-		return res.content;
+		return blob.content;
 	}
 
 	async getFileSha(path: string, branch = this.branch): Promise<string | null> {
@@ -115,11 +113,11 @@ export class GitHubGatewayAPI {
 			const parts = path.split("/");
 			const filename = parts.pop()!;
 			const dir = parts.join("/");
-			const treeRef = `${branch}:${dir}`;
-			const tree: any = await this.client.request(
-				this.repoPath(`/git/trees/${encodeURIComponent(treeRef)}`),
-			);
-			const file = tree.tree?.find((f: any) => f.path === filename);
+			const treeRef = dir
+				? `${branch}:${encodeURIComponent(dir)}`
+				: `${branch}:`;
+			const tree: any = await this.getTree(treeRef);
+			const file = (tree.tree || []).find((f: any) => f.path === filename);
 			return file?.sha || null;
 		} catch {
 			return null;
@@ -127,8 +125,18 @@ export class GitHubGatewayAPI {
 	}
 
 	async listTree(branch = this.branch, path = "", recursive = false) {
-		const ref = path ? `${branch}:${path}` : branch;
-		return this.getTree(encodeURIComponent(ref), recursive);
+		const treeRef = path
+			? `${branch}:${encodeURIComponent(path)}`
+			: `${branch}:`;
+		return this.getTree(treeRef, recursive);
+	}
+
+	async getCommits(path: string, branch = this.branch) {
+		const params = new URLSearchParams({
+			path,
+			sha: branch,
+		});
+		return this.client.request(`/commits?${params.toString()}`);
 	}
 
 	async createPullRequest(
@@ -136,7 +144,7 @@ export class GitHubGatewayAPI {
 		head: string,
 		base = this.branch,
 	): Promise<PullRequest> {
-		return this.client.request(this.repoPath("/pulls"), {
+		return this.client.request("/pulls", {
 			method: "POST",
 			body: JSON.stringify({ title, head, base }),
 		});
@@ -145,25 +153,25 @@ export class GitHubGatewayAPI {
 	async getPullRequests(state = "open", head?: string) {
 		const params = new URLSearchParams({ state, per_page: "100" });
 		if (head) params.set("head", head);
-		return this.client.request(this.repoPath(`/pulls?${params}`));
+		return this.client.request(`/pulls?${params.toString()}`);
 	}
 
 	async mergePullRequest(number: number, sha: string, method = "merge") {
-		return this.client.request(this.repoPath(`/pulls/${number}/merge`), {
+		return this.client.request(`/pulls/${number}/merge`, {
 			method: "PUT",
 			body: JSON.stringify({ sha, merge_method: method }),
 		});
 	}
 
 	async closePullRequest(number: number) {
-		return this.client.request(this.repoPath(`/pulls/${number}`), {
+		return this.client.request(`/pulls/${number}`, {
 			method: "PATCH",
 			body: JSON.stringify({ state: "closed" }),
 		});
 	}
 
 	async getCompare(base: string, head: string) {
-		return this.client.request(this.repoPath(`/compare/${base}...${head}`));
+		return this.client.request(`/compare/${base}...${head}`);
 	}
 
 	async hasWriteAccess(): Promise<boolean> {

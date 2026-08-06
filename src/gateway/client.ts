@@ -13,19 +13,26 @@ export class GatewayClient {
 		const token = await this.tokenFn();
 		const url = `${this.baseUrl}/github${path}`;
 
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${token}`,
+			...(options.headers as Record<string, string>),
+		};
+
+		if (options.body && !headers["Content-Type"]) {
+			headers["Content-Type"] = "application/json; charset=utf-8";
+		}
+
 		const res = await fetch(url, {
 			...options,
-			headers: {
-				Authorization: `Bearer ${token}`,
-				"Content-Type": "application/json; charset=utf-8",
-				...options.headers,
-			},
+			headers,
 		});
 
 		if (!res.ok) {
 			const body = await res.text().catch(() => "");
 			throw new GatewayError(res.status, body || res.statusText);
 		}
+
+		if (res.status === 204) return undefined as T;
 
 		const ct = res.headers.get("Content-Type") || "";
 		if (ct.includes("json")) return res.json() as T;
