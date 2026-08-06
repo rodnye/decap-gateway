@@ -1,7 +1,18 @@
-import { bar } from "./bar.ts";
-import { foo } from "./foo.ts";
-import { baz } from "./nested/baz.ts";
-
-export function foobar(a: number, b: number) {
-	return foo().repeat(a).length + bar().repeat(b).length + baz().length;
-}
+export { GoTrueAuth } from "./auth/gotrue.ts";
+export { GatewayClient, GatewayError } from "./gateway/client.ts";
+export { GitHubGatewayAPI } from "./gateway/github.ts";
+export { GitOperations } from "./git/operations.ts";
+export { DecapGateway } from "./gateway.ts";
+export type {
+	GatewayConfig,
+	CommitMessages,
+	AuthUser,
+	CommitAuthor,
+	FileEntry,
+	MediaFile,
+	PersistOptions,
+	TreeEntry,
+	GitRef,
+	PullRequest,
+	GatewaySettings,
+} from "./types.ts";
