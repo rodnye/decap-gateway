@@ -1,4 +1,5 @@
 import type { AuthUser } from "../types.ts";
+import { GoTrueAuthError } from "./errors.ts";
 
 interface GoTrueTokenResponse {
 	access_token: string;
@@ -10,6 +11,9 @@ interface GoTrueTokenResponse {
 	user_metadata?: Record<string, unknown>;
 }
 
+/**
+ * Implementation of GoTrue api with browser local storage
+ */
 export class GoTrueAuth {
 	private apiUrl: string;
 	private currentUser: AuthUser | null = null;
@@ -18,7 +22,14 @@ export class GoTrueAuth {
 		this.apiUrl = identityUrl.replace(/\/$/, "");
 	}
 
-	async login(email: string, password: string): Promise<AuthUser> {
+	/**
+	 * login into gateway
+	 */
+	async login(
+		email: string,
+		password: string,
+		persist: boolean = false,
+	): Promise<AuthUser> {
 		const res = await fetch(`${this.apiUrl}/token?grant_type=password`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -32,10 +43,15 @@ export class GoTrueAuth {
 
 		const data = (await res.json()) as GoTrueTokenResponse;
 		this.currentUser = this.mapResponse(data);
-		this.persist(this.currentUser);
+
+		if (persist) this.persist(this.currentUser);
+
 		return this.currentUser;
 	}
 
+	/**
+	 * Restore latest session (only browser)
+	 */
 	async restore(): Promise<AuthUser | null> {
 		const stored = this.readPersisted();
 		if (!stored) return null;
@@ -56,6 +72,9 @@ export class GoTrueAuth {
 		}
 	}
 
+	/**
+	 *
+	 */
 	async getToken(): Promise<string> {
 		if (!this.currentUser) throw new GoTrueAuthError(401, "Not authenticated");
 
@@ -83,6 +102,10 @@ export class GoTrueAuth {
 		this.clearPersisted();
 	}
 
+	//
+	// Private methods ...
+	//
+
 	private async refreshToken(refreshToken: string): Promise<AuthUser> {
 		const res = await fetch(`${this.apiUrl}/token?grant_type=refresh_token`, {
 			method: "POST",
@@ -109,12 +132,16 @@ export class GoTrueAuth {
 		};
 	}
 
-	private storageKey = "decap_gateway_session";
+	//
+	// Browser Localstorage methods...
+	//
+
+	private STORAGE_KEY = "decap_gateway_session";
 
 	private persist(user: AuthUser): void {
 		if (typeof globalThis.localStorage !== "undefined") {
 			try {
-				globalThis.localStorage.setItem(this.storageKey, JSON.stringify(user));
+				globalThis.localStorage.setItem(this.STORAGE_KEY, JSON.stringify(user));
 			} catch {
 				// quota exceeded, ignore
 			}
@@ -124,7 +151,7 @@ export class GoTrueAuth {
 	private readPersisted(): AuthUser | null {
 		if (typeof globalThis.localStorage === "undefined") return null;
 		try {
-			const raw = globalThis.localStorage.getItem(this.storageKey);
+			const raw = globalThis.localStorage.getItem(this.STORAGE_KEY);
 			return raw ? (JSON.parse(raw) as AuthUser) : null;
 		} catch {
 			return null;
@@ -133,17 +160,7 @@ export class GoTrueAuth {
 
 	private clearPersisted(): void {
 		if (typeof globalThis.localStorage !== "undefined") {
-			globalThis.localStorage.removeItem(this.storageKey);
+			globalThis.localStorage.removeItem(this.STORAGE_KEY);
 		}
-	}
-}
-
-export class GoTrueAuthError extends Error {
-	constructor(
-		public status: number,
-		message: string,
-	) {
-		super(message);
-		this.name = "GoTrueAuthError";
 	}
 }
