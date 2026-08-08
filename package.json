@@ -32,6 +32,7 @@
     "prepare": "rimraf build && tsgo --project tsconfig.build.json",
     "build": "rimraf build && tsgo --project tsconfig.build.json",
     "clean": "rimraf build coverage",
+    "format": "biome format --write .",
     "type:check": "tsgo --project tsconfig.json",
     "lint": "biome check . --write --unsafe",
     "lint:check": "biome ci .",
