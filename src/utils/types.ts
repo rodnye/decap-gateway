@@ -15,15 +15,6 @@ export interface CommitMessages {
 	openAuthoring?: string;
 }
 
-export interface AuthUser {
-	id: string;
-	email: string;
-	token: string;
-	refreshToken: string;
-	userMetadata: Record<string, unknown>;
-	expiresAt: number;
-}
-
 export interface CommitAuthor {
 	name: string;
 	email: string;
@@ -31,7 +22,7 @@ export interface CommitAuthor {
 
 export interface FileEntry {
 	path: string;
-	content: string;
+	content: string | ArrayBuffer;
 	sha?: string;
 }
 
@@ -57,14 +48,6 @@ export interface TreeEntry {
 export interface GitRef {
 	ref: string;
 	sha: string;
-}
-
-export interface PullRequest {
-	number: number;
-	title: string;
-	state: "open" | "closed";
-	head: { ref: string; sha: string };
-	base: { ref: string; sha: string };
 }
 
 export interface GatewaySettings {

@@ -1,18 +1,6 @@
-export { GoTrueAuth } from "./auth/gotrue.ts";
-export { GatewayClient, GatewayError } from "./gateway/client.ts";
-export { GitHubGatewayAPI } from "./gateway/github.ts";
-export { GitOperations } from "./git/operations.ts";
-export { DecapGateway } from "./gateway.ts";
-export type {
-	GatewayConfig,
-	CommitMessages,
-	AuthUser,
-	CommitAuthor,
-	FileEntry,
-	MediaFile,
-	PersistOptions,
-	TreeEntry,
-	GitRef,
-	PullRequest,
-	GatewaySettings,
-} from "./types.ts";
+export * from "./auth/gotrue.ts";
+export * from "./git/github.ts";
+export * from "./operations.ts";
+export * from "./decap.ts";
+export * from "./utils/errors.ts";
+export type * from "./utils/types.ts";

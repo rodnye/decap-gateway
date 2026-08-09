@@ -1,30 +1,11 @@
-import type { AuthUser } from "../types.ts";
-import { GoTrueAuthError } from "./errors.ts";
-
-interface GoTrueTokenResponse {
-	access_token: string;
-	token_type: string;
-	expires_in: number;
-	refresh_token: string;
-	id: string;
-	email: string;
-	user_metadata?: Record<string, unknown>;
-}
+import { AuthError } from "../utils/errors.ts";
+import { AuthProvider } from "./_provider.ts";
+import type { AuthUser, GoTrueTokenResponse } from "./_types.ts";
 
 /**
  * Implementation of GoTrue api with browser local storage
  */
-export class GoTrueAuth {
-	private apiUrl: string;
-	private currentUser: AuthUser | null = null;
-
-	constructor(identityUrl: string) {
-		this.apiUrl = identityUrl.replace(/\/$/, "");
-	}
-
-	/**
-	 * login into gateway
-	 */
+export class GoTrueAuth extends AuthProvider {
 	async login(
 		email: string,
 		password: string,
@@ -38,7 +19,7 @@ export class GoTrueAuth {
 
 		if (!res.ok) {
 			const body = await res.text().catch(() => "");
-			throw new GoTrueAuthError(res.status, body || "Authentication failed");
+			throw new AuthError(res.status, body || "Authentication failed");
 		}
 
 		const data = (await res.json()) as GoTrueTokenResponse;
@@ -49,9 +30,6 @@ export class GoTrueAuth {
 		return this.currentUser;
 	}
 
-	/**
-	 * Restore latest session (only browser)
-	 */
 	async restore(): Promise<AuthUser | null> {
 		const stored = this.readPersisted();
 		if (!stored) return null;
@@ -76,7 +54,7 @@ export class GoTrueAuth {
 	 *
 	 */
 	async getToken(): Promise<string> {
-		if (!this.currentUser) throw new GoTrueAuthError(401, "Not authenticated");
+		if (!this.currentUser) throw new AuthError(401, "Not authenticated");
 
 		if (this.currentUser.expiresAt < Date.now() + 30_000) {
 			const refreshed = await this.refreshToken(this.currentUser.refreshToken);
@@ -114,7 +92,7 @@ export class GoTrueAuth {
 		});
 
 		if (!res.ok) {
-			throw new GoTrueAuthError(res.status, "Token refresh failed");
+			throw new AuthError(res.status, "Token refresh failed");
 		}
 
 		const data = (await res.json()) as GoTrueTokenResponse;

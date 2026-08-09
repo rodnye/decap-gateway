@@ -12,3 +12,12 @@ export function base64ToUtf8(b64: string) {
 	const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
 	return new TextDecoder().decode(bytes);
 }
+
+export function bufferToBase64(buffer: ArrayBuffer) {
+	return btoa(
+		new Uint8Array(buffer).reduce(
+			(data, byte) => data + String.fromCharCode(byte),
+			"",
+		),
+	);
+}

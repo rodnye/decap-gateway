@@ -1,57 +1,124 @@
-import type { GatewayClient } from "./client.ts";
-import type { TreeEntry, PullRequest, CommitAuthor } from "../types.ts";
-import { base64ToUtf8 } from "../utils.ts";
+import type {
+	TreeEntry,
+	CommitAuthor,
+	GatewaySettings,
+} from "../utils/types.ts";
+import { base64ToUtf8 } from "../utils/base64.ts";
+import { GatewayError } from "../utils/errors.ts";
+import { GitProvider } from "./_provider.ts";
 
-export class GitHubGatewayAPI {
-	private client: GatewayClient;
+/**
+ * INFO: This gateway not use standars Github Endpoints, use a custom implementation write by Decap
+ */
+export class GitHubGatewayAPI implements GitProvider {
+	private baseUrl: string;
 	private branch: string;
 	private commitAuthor: CommitAuthor;
+	private tokenFn: () => Promise<string>;
+	private githubAvailable: boolean = false;
 
 	constructor(
-		client: GatewayClient,
+		gatewayUrl: string,
+		token: string | (() => Promise<string>),
 		_repo: string,
 		branch: string,
 		commitAuthor: CommitAuthor,
 	) {
-		this.client = client;
+		this.baseUrl = gatewayUrl.replace(/\/$/, "");
+		this.tokenFn = typeof token === "string" ? async () => token : token;
 		this.branch = branch;
 		this.commitAuthor = commitAuthor;
 	}
 
+	/**
+	 * Low method to make requests
+	 */
+	async request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+		await this.checkAvailable();
+
+		const token = await this.tokenFn();
+		const url = `${this.baseUrl}/github${path}`;
+
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${token}`,
+			...(options.headers as Record<string, string>),
+		};
+
+		if (options.body && !headers["Content-Type"]) {
+			headers["Content-Type"] = "application/json; charset=utf-8";
+		}
+
+		const res = await fetch(url, {
+			...options,
+			headers,
+		});
+
+		if (!res.ok) {
+			const body = await res.text().catch(() => "");
+			throw new GatewayError(res.status, body || res.statusText);
+		}
+
+		if (res.status === 204) return undefined as T;
+
+		const ct = res.headers.get("Content-Type") || "";
+		if (ct.includes("json")) return res.json() as T;
+		return res.text() as T;
+	}
+
+	/**
+	 * Throw error if not Github Provider available
+	 */
+	async checkAvailable() {
+		if (!this.githubAvailable) {
+			const token = await this.tokenFn();
+			const res = await fetch(`${this.baseUrl}/settings`, {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!res.ok)
+				throw new GatewayError(res.status, "Failed to fetch gateway settings");
+			const settings = (await res.json()) as GatewaySettings;
+
+			if (!settings.github_enabled) {
+				throw new Error("GitHub is not enabled on this gateway");
+			}
+		}
+		return (this.githubAvailable = true);
+	}
+
 	async getBranch(branch = this.branch) {
-		return this.client.request(`/branches/${encodeURIComponent(branch)}`);
+		return this.request(`/branches/${encodeURIComponent(branch)}`);
 	}
 
 	async getRef(ref: string) {
-		return this.client.request(`/git/refs/${ref}`);
+		return this.request(`/git/refs/${ref}`);
 	}
 
 	async createRef(ref: string, sha: string) {
-		return this.client.request("/git/refs", {
+		return this.request("/git/refs", {
 			method: "POST",
 			body: JSON.stringify({ ref: `refs/${ref}`, sha }),
 		});
 	}
 
 	async patchRef(ref: string, sha: string, force = false) {
-		return this.client.request(`/git/refs/${ref}`, {
+		return this.request(`/git/refs/${ref}`, {
 			method: "PATCH",
 			body: JSON.stringify({ sha, force }),
 		});
 	}
 
 	async deleteRef(ref: string) {
-		return this.client.request(`/git/refs/${ref}`, {
+		return this.request(`/git/refs/${ref}`, {
 			method: "DELETE",
 		});
 	}
 
 	async getBlob(sha: string): Promise<{ content: string; encoding: string }> {
-		return this.client.request(`/git/blobs/${sha}`);
+		return this.request(`/git/blobs/${sha}`);
 	}
 
 	async createBlob(content: string, encoding: "base64" | "utf-8" = "base64") {
-		return this.client.request("/git/blobs", {
+		return this.request("/git/blobs", {
 			method: "POST",
 			body: JSON.stringify({ content, encoding }),
 		});
@@ -59,11 +126,11 @@ export class GitHubGatewayAPI {
 
 	async getTree(treeRef: string, recursive = false) {
 		const q = recursive ? "?recursive=1" : "";
-		return this.client.request(`/git/trees/${treeRef}${q}`);
+		return this.request(`/git/trees/${treeRef}${q}`);
 	}
 
 	async createTree(baseSha: string | null, tree: TreeEntry[]) {
-		return this.client.request("/git/trees", {
+		return this.request("/git/trees", {
 			method: "POST",
 			body: JSON.stringify({
 				...(baseSha ? { base_tree: baseSha } : {}),
@@ -78,7 +145,7 @@ export class GitHubGatewayAPI {
 		parents: string[],
 		author?: CommitAuthor,
 	) {
-		return this.client.request("/git/commits", {
+		return this.request("/git/commits", {
 			method: "POST",
 			body: JSON.stringify({
 				message,
@@ -137,42 +204,7 @@ export class GitHubGatewayAPI {
 			path,
 			sha: branch,
 		});
-		return this.client.request(`/commits?${params.toString()}`);
-	}
-
-	async createPullRequest(
-		title: string,
-		head: string,
-		base = this.branch,
-	): Promise<PullRequest> {
-		return this.client.request("/pulls", {
-			method: "POST",
-			body: JSON.stringify({ title, head, base }),
-		});
-	}
-
-	async getPullRequests(state = "open", head?: string) {
-		const params = new URLSearchParams({ state, per_page: "100" });
-		if (head) params.set("head", head);
-		return this.client.request(`/pulls?${params.toString()}`);
-	}
-
-	async mergePullRequest(number: number, sha: string, method = "merge") {
-		return this.client.request(`/pulls/${number}/merge`, {
-			method: "PUT",
-			body: JSON.stringify({ sha, merge_method: method }),
-		});
-	}
-
-	async closePullRequest(number: number) {
-		return this.client.request(`/pulls/${number}`, {
-			method: "PATCH",
-			body: JSON.stringify({ state: "closed" }),
-		});
-	}
-
-	async getCompare(base: string, head: string) {
-		return this.client.request(`/compare/${base}...${head}`);
+		return this.request(`/commits?${params.toString()}`);
 	}
 
 	async hasWriteAccess(): Promise<boolean> {
