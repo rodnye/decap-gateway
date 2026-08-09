@@ -12,7 +12,10 @@ Manages authentication, tree operations, blob manipulation, commits, and media p
 ## Install
 
 ```bash
-npm install @rodny/decap-gateway
+npm install github:rodnye/decap-gateway#latest
+
+# coming soon...
+# npm install @rodny/decap-gateway
 ```
 
 ## Quick start
@@ -20,16 +23,16 @@ npm install @rodny/decap-gateway
 ```ts
 import { DecapGateway } from "@rodny/decap-gateway";
 
-const gateway = new DecapGateway({
+const decap = new DecapGateway({
   identityUrl: "https://auth.decapbridge.com/sites/xxxxxx-xxxxxx-xxxxxx-xxxxxx",
-  gatewayUrl: "https://gateway.decapbridge.com",
+  gatewayUrl: "https://decap.decapbridge.com",
 
   repo: "owner/repo",
   branch: "main",
 });
 
-const user = await gateway.login("user@example.com", "xxxxxxxxx");
-const content = await gateway.operations.readFile("src/data/config.json");
+const user = await decap.login("user@example.com", "xxxxxxxxx");
+const content = await decap.operations.readFile("src/data/config.json");
 ```
 
 ## Configuration
@@ -44,37 +47,37 @@ interface GatewayConfig {
 }
 ```
 
-## GitOperations
+## OperationsProvider
 
 High-level interface for reading, listing, writing, and deleting files.
 
 ### readFile
 
 ```ts
-const raw = await gateway.operations.readFile("src/data/products/item.json");
+const raw = await decap.operations.readFile("src/data/products/item.json");
 const data = JSON.parse(raw);
 ```
 
 ### readFileSha
 
 ```ts
-const sha = await gateway.operations.readFileSha("src/data/products/item.json");
+const sha = await decap.operations.readFileSha("src/data/products/item.json");
 // "cc651297356949ec49a9cc7af4583de8ee74700b" or null
 ```
 
 ### listFiles
 
 ```ts
-const files = await gateway.operations.listFiles("src/data/products");
+const files = await decap.operations.listFiles("src/data/products");
 // [{ path: "src/data/products/item.json", sha: "cc6512..." }, ...]
 ```
 
-### persistFiles
+### writeFiles
 
-Create or update files and commit in a single operation.
+Create or update files and commit
 
 ```ts
-await gateway.operations.persistFiles(
+await decap.operations.writeFiles(
   [
     {
       path: "src/data/products/item.json",
@@ -82,11 +85,9 @@ await gateway.operations.persistFiles(
     },
     { path: "src/data/products/other.json", content: '{"key":"value"}' },
   ],
-  [],
   {
     commitMessage: 'data: update "item" - user via DecapBridge',
     author: { name: "User", email: "user@example.com" },
-    branch: "main",
   },
 );
 ```
@@ -94,22 +95,31 @@ await gateway.operations.persistFiles(
 ### deleteFiles
 
 ```ts
-await gateway.operations.deleteFiles(["src/data/products/obsolete.json"], {
-  commitMessage: 'data: delete "obsolete" - user via DecapBridge',
+await decap.operations.deleteFiles(["src/data/products/obsolete.json"], {
+  commitMessage: 'data: delete "obsolete" - user via @rodny/decap-gateway',
   author: { name: "User", email: "user@example.com" },
 });
 ```
 
-### createBranch
+### persistFiles
+
+Create, remove or update files and commit in a single operation.
 
 ```ts
-await gateway.operations.createBranch("feature/new-items", "main");
-```
-
-### deleteBranch
-
-```ts
-await gateway.operations.deleteBranch("feature/new-items");
+await decap.operations.persistFiles(
+  [
+    {
+      path: "src/data/products/item.json",
+      content: JSON.stringify(data, null, 2),
+    },
+    { path: "src/data/products/other.json", content: '{"key":"value"}' },
+  ],
+  ["src/data/products/obsolete.json"],
+  {
+    commitMessage: 'data: update "item" - user via DecapBridge',
+    author: { name: "User", email: "user@example.com" },
+  },
+);
 ```
 
 ## DecapGateway
@@ -117,7 +127,7 @@ await gateway.operations.deleteBranch("feature/new-items");
 Main entry point. Handles auth lifecycle and exposes operation layers.
 
 ```ts
-const gateway = new DecapGateway(config);
+const decap = new DecapGateway(config);
 ```
 
 ### Methods
@@ -131,12 +141,12 @@ const gateway = new DecapGateway(config);
 
 ### Properties
 
-| Property     | Type               | Description                |
-| ------------ | ------------------ | -------------------------- |
-| `operations` | `GitOperations`    | High-level file operations |
-| `github`     | `GitHubGatewayAPI` | Low-level git plumbing     |
+| Property     | Type                 | Description                |
+| ------------ | -------------------- | -------------------------- |
+| `operations` | `OperationsProvider` | High-level file operations |
+| `git`        | `GitProvider`        | Low-level git plumbing     |
 
-## GitHubGatewayAPI
+## GitProvider
 
 Low-level git plumbing. Maps directly to gateway endpoints.
 
@@ -144,45 +154,45 @@ Low-level git plumbing. Maps directly to gateway endpoints.
 
 ```ts
 // GET /github/branches/{branch}
-const branch = await gateway.github.getBranch();
+const branch = await decap.git.getBranch();
 // { commit: { sha: "..." }, protected: false }
 
 // GET /github/git/refs/{ref}
-const ref = await gateway.github.getRef("heads/main");
+const ref = await decap.git.getRef("heads/main");
 
 // POST /github/git/refs
-await gateway.github.createRef("heads/new-branch", parentSha);
+await decap.git.createRef("heads/new-branch", parentSha);
 
 // PATCH /github/git/refs/{ref}
-await gateway.github.patchRef("heads/main", commitSha);
+await decap.git.patchRef("heads/main", commitSha);
 
 // DELETE /github/git/refs/{ref}
-await gateway.github.deleteRef("heads/old-branch");
+await decap.git.deleteRef("heads/old-branch");
 ```
 
 ### Trees
 
 ```ts
 // List root tree: GET /github/git/trees/{branch}:
-const root = await gateway.github.listTree();
+const root = await decap.git.listTree();
 // { sha: "...", tree: [{ path, type, sha, size }, ...] }
 
 // List subdirectory: GET /github/git/trees/{branch}:{encoded_path}
-const tree = await gateway.github.listTree("main", "src/data/products");
+const tree = await decap.git.listTree("main", "src/data/products");
 
 // List recursively
-const full = await gateway.github.listTree("main", "", true);
+const full = await decap.git.listTree("main", "", true);
 ```
 
 ### Blobs
 
 ```ts
 // GET /github/git/blobs/{sha}
-const blob = await gateway.github.getBlob("cc65129735...");
+const blob = await decap.git.getBlob("cc65129735...");
 // { content: "base64...", encoding: "base64" }
 
 // POST /github/git/blobs
-const newBlob = await gateway.github.createBlob(base64Content, "base64");
+const newBlob = await decap.git.createBlob(base64Content, "base64");
 // { sha: "..." }
 ```
 
@@ -190,12 +200,12 @@ const newBlob = await gateway.github.createBlob(base64Content, "base64");
 
 ```ts
 // POST /github/git/trees
-const tree = await gateway.github.createTree(baseTreeSha, [
+const tree = await decap.git.createTree(baseTreeSha, [
   { path: "file.json", mode: "100644", type: "blob", sha: blobSha },
 ]);
 
 // POST /github/git/commits
-const commit = await gateway.github.createCommit(
+const commit = await decap.git.createCommit(
   "data: update file",
   tree.sha,
   [parentSha],
@@ -207,7 +217,7 @@ const commit = await gateway.github.createCommit(
 
 ```ts
 // GET /github/commits?path={file}&sha={branch}
-const history = await gateway.github.getCommits("src/data/categories.json");
+const history = await decap.git.getCommits("src/data/categories.json");
 ```
 
 ### File content (composite)
@@ -215,38 +225,19 @@ const history = await gateway.github.getCommits("src/data/categories.json");
 Reads a file by resolving tree entry then fetching blob.
 
 ```ts
-const content = await gateway.github.getFileContent("src/data/config.json");
+const content = await decap.git.getFileContent("src/data/config.json");
 ```
 
 ### File SHA lookup
 
 ```ts
-const sha = await gateway.github.getFileSha("src/data/config.json");
-```
-
-### Pull requests
-
-```ts
-const pr = await gateway.github.createPullRequest(
-  "Update data",
-  "feature/x",
-  "main",
-);
-const prs = await gateway.github.getPullRequests("open");
-await gateway.github.mergePullRequest(pr.number, pr.head.sha);
-await gateway.github.closePullRequest(pr.number);
-```
-
-### Compare
-
-```ts
-const diff = await gateway.github.getCompare("main", "feature/x");
+const sha = await decap.git.getFileSha("src/data/config.json");
 ```
 
 ### Write access check
 
 ```ts
-const canWrite = await gateway.github.hasWriteAccess();
+const canWrite = await decap.git.hasWriteAccess();
 ```
 
 ## Examples
@@ -256,41 +247,40 @@ const canWrite = await gateway.github.hasWriteAccess();
 ```ts
 import { DecapGateway } from "@rodny/decap-gateway";
 
-const gateway = new DecapGateway({
+const decap = new DecapGateway({
   identityUrl: "https://auth.decapbridge.com/sites/xxxxxx-xxxxxx-xxxxxx-xxxxxx",
-  gatewayUrl: "https://gateway.decapbridge.com",
+  gatewayUrl: "https://decap.decapbridge.com",
   repo: "pepe/catalog",
   branch: "dev",
 });
 
-await gateway.login("admin@example.com", "secret");
+await decap.login("admin@example.com", "secret");
 
 // List products
-const files = await gateway.operations.listFiles("src/data/products");
+const files = await decap.operations.listFiles("src/data/products");
 console.log(files.map((f) => f.path));
 
 // Read and modify
-const raw = await gateway.operations.readFile("src/data/products/chorizo.json");
+const raw = await decap.operations.readFile("src/data/products/chorizo.json");
 const product = JSON.parse(raw);
 product.price = 200;
 product.available = false;
 
 // Commit
-await gateway.operations.persistFiles(
+await decap.operations.writeFiles(
   [
     {
       path: "src/data/products/chorizo.json",
       content: JSON.stringify(product, null, 2),
     },
   ],
-  [],
   {
     commitMessage: 'data: update "chorizo" - admin via @rodny/decap-gateway',
     author: { name: "Admin", email: "admin@example.com" },
   },
 );
 
-await gateway.logout();
+await decap.logout();
 ```
 
 ### Example 2: Upload a image in browser
@@ -298,14 +288,14 @@ await gateway.logout();
 ```ts
 import { DecapGateway } from "@rodny/decap-gateway";
 
-const gw = new DecapGateway({
+const decap = new DecapGateway({
   identityUrl: "https://auth.decapbridge.com/sites/xxxxxx-xxxxxx-xxxxxx-xxxxxx",
-  gatewayUrl: "https://gateway.decapbridge.com",
+  gatewayUrl: "https://decap.decapbridge.com",
   repo: "owner/repo",
   branch: "main",
 });
 
-await gw.login("user@example.com", "password");
+await decap.login("user@example.com", "password");
 
 const input = document.querySelector<HTMLInputElement>("#file-input");
 
@@ -324,11 +314,15 @@ input.addEventListener("change", async () => {
 
   const destPath = `public/images/${file.name}`;
 
-  await gw.operations.persistFiles([{ path: destPath, content: base64 }], [], {
-    commitMessage: `data: upload "${destPath}" - ${gw.user.email} via @rodny/decap-gateway`,
-    author: { name: gw.user.email.split("@")[0], email: gw.user.email },
-    branch: "main",
-  });
+  await decap.operations.persistFiles(
+    [{ path: destPath, content: base64 }],
+    [],
+    {
+      commitMessage: `data: upload "${destPath}" - ${decap.user.email} via @rodny/decap-gateway`,
+      author: { name: decap.user.email.split("@")[0], email: gw.user.email },
+      branch: "main",
+    },
+  );
 
   console.log(`Uploaded: ${destPath}`);
 });
@@ -342,34 +336,34 @@ import { readFileSync } from "fs";
 
 const gw = new DecapGateway({
   identityUrl: "https://your-site.netlify.app/.netlify/identity",
-  gatewayUrl: "https://gateway.decapbridge.com",
+  gatewayUrl: "https://decap.decapbridge.com",
   repo: "owner/repo",
   branch: "main",
 });
 
-await gw.login("user@example.com", "password");
+await decap.login("user@example.com", "password");
 
 const filePath = "./photo.png";
 const base64 = readFileSync(filePath).toString("base64");
 const destPath = "public/images/photo.png";
 
-await gw.operations.persistFiles([{ path: destPath, content: base64 }], [], {
+await decap.operations.persistFiles([{ path: destPath, content: base64 }], [], {
   commitMessage: `data: upload "${destPath}" - admin via @rodny/decap-gateway`,
   author: { name: "Admin", email: "user@example.com" },
   branch: "main",
 });
 
 console.log(`Uploaded: ${destPath}`);
-await gw.logout();
+await decap.logout();
 ```
 
 ### Example 4: Downloading images
 
 ```ts
 // Browser
-const tree = await gw.github.listTree("main", "public/images");
+const tree = await decap.github.listTree("main", "public/images");
 const png = tree.tree.find((f) => f.path.endsWith(".png"));
-const blob = await gw.github.getBlob(png.sha);
+const blob = await decap.github.getBlob(png.sha);
 const bytes = Uint8Array.from(atob(blob.content), (c) => c.charCodeAt(0));
 const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
 
@@ -382,7 +376,7 @@ writeFileSync(png.path.split("/").pop(), buffer);
 ### Example 5: Deleting files
 
 ```ts
-await gw.operations.deleteFiles(["public/images/old-photo.png"], {
+await decap.operations.deleteFiles(["public/images/old-photo.png"], {
   commitMessage:
     'data: delete "public/images/old-photo.png" - admin via DecapBridge',
   author: { name: "Admin", email: "user@example.com" },
@@ -393,7 +387,6 @@ await gw.operations.deleteFiles(["public/images/old-photo.png"], {
 
 | Library method              | HTTP   | Gateway path                        |
 | --------------------------- | ------ | ----------------------------------- |
-| `getSettings()`             | GET    | `/settings`                         |
 | `getBranch(b)`              | GET    | `/github/branches/{b}`              |
 | `getRef(r)`                 | GET    | `/github/git/refs/{r}`              |
 | `createRef(r, sha)`         | POST   | `/github/git/refs`                  |
