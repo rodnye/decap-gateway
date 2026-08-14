@@ -12,10 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
 
   lint:
     name: 🔬 Lint & Format
@@ -23,12 +25,14 @@ jobs:
     needs: [dependencies]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: 🔬 Lint & Format
-        run: node --run lint:check
+        run: pnpm run lint:check
 
   audit:
     name: 🛡️ Audit
@@ -36,11 +40,14 @@ jobs:
     needs: [dependencies]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: 🛡️ Audit
-        run: npm audit --audit-level=high
+        run: pnpm audit --audit-level=high
 
   spell:
     name: 🈸 Spellcheck
@@ -48,12 +55,14 @@ jobs:
     needs: [dependencies]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: 🈸 Spellcheck
-        run: node --run spell:check
+        run: pnpm run spell:check
 
   type:
     name: ʦ Typecheck
@@ -61,12 +70,14 @@ jobs:
     needs: [dependencies]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: ʦ Typecheck
-        run: node --run type:check
+        run: pnpm run type:check
 
   test:
     name: ⚡ Tests
@@ -74,12 +85,14 @@ jobs:
     needs: [dependencies]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: ⚡ Tests
-        run: node --run test:coverage
+        run: pnpm run test:coverage
 
   test-setup:
     name: ⚡ Setup tests
@@ -87,12 +100,14 @@ jobs:
     needs: [dependencies]
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: ⚡ Tests
-        run: node --run test:setup
+        run: pnpm run test:setup
 
   build-and-release:
     name: 🚀 Build & release
@@ -100,22 +115,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: 🔨 Build
-        run: node --run build
+        run: pnpm run build
       - name: 🚀 Release
         if: github.ref == 'refs/heads/main'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node --run semantic-release
+        run: pnpm run semantic-release
 
       - name: 👀 Preview release
         id: pack
         if: github.ref != 'refs/heads/main'
-        run: echo "TARBALL=$(npm pack)" >> $GITHUB_OUTPUT
+        run: echo "TARBALL=$(pnpm pack)" >> $GITHUB_OUTPUT
 
       - name: 📦 Upload package
         if: github.ref != 'refs/heads/main'
