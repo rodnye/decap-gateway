@@ -52,5 +52,7 @@ export interface GitRef {
 
 export interface GatewaySettings {
 	github_enabled: boolean;
-	roles?: string[];
+	gitlab_enabled: boolean;
+	bitbucket_enabled: boolean;
+	roles?: string[] | null;
 }
