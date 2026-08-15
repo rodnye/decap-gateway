@@ -1,10 +1,10 @@
+import type { AuthProvider } from "./auth/_provider.ts";
+import type { AuthUser } from "./auth/_types.ts";
 import { GoTrueAuth } from "./auth/gotrue.ts";
+import type { GitProvider } from "./git/_provider.ts";
 import { GitHubGatewayAPI } from "./git/github.ts";
 import { OperationsProvider } from "./operations.ts";
-import type { GatewayConfig, CommitAuthor } from "./utils/types.ts";
-import { AuthUser } from "./auth/_types.ts";
-import { AuthProvider } from "./auth/_provider.ts";
-import { GitProvider } from "./git/_provider.ts";
+import type { CommitAuthor, GatewayConfig } from "./utils/types.ts";
 
 export class DecapGateway {
 	private _auth: AuthProvider;

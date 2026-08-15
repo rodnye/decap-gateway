@@ -1,11 +1,11 @@
-import type {
-	TreeEntry,
-	CommitAuthor,
-	GatewaySettings,
-} from "../utils/types.ts";
 import { base64ToUtf8 } from "../utils/base64.ts";
 import { GatewayError } from "../utils/errors.ts";
-import { GitProvider } from "./_provider.ts";
+import type {
+	CommitAuthor,
+	GatewaySettings,
+	TreeEntry,
+} from "../utils/types.ts";
+import type { GitProvider } from "./_provider.ts";
 
 /**
  * INFO: This gateway not use standars Github Endpoints, use a custom implementation write by Decap
@@ -28,6 +28,14 @@ export class GitHubGatewayAPI implements GitProvider {
 		this.tokenFn = typeof token === "string" ? async () => token : token;
 		this.branch = branch;
 		this.commitAuthor = commitAuthor;
+	}
+
+	get defaults() {
+		return {
+			baseUrl: this.baseUrl,
+			branch: this.branch,
+			commitAuthor: this.commitAuthor,
+		};
 	}
 
 	/**
@@ -113,7 +121,7 @@ export class GitHubGatewayAPI implements GitProvider {
 		});
 	}
 
-	async getBlob(sha: string): Promise<{ content: string; encoding: string }> {
+	async getBlob(sha: string) {
 		return this.request(`/git/blobs/${sha}`);
 	}
 
@@ -124,7 +132,22 @@ export class GitHubGatewayAPI implements GitProvider {
 		});
 	}
 
-	async getTree(treeRef: string, recursive = false) {
+	async getTree(
+		treeRef: string,
+		recursive = false,
+	): Promise<{
+		sha: string;
+		url: string;
+		tree: {
+			path: string;
+			mode: string;
+			type: string;
+			sha: string;
+			size: number;
+			url: string;
+		}[];
+		truncated: boolean;
+	}> {
 		const q = recursive ? "?recursive=1" : "";
 		return this.request(`/git/trees/${treeRef}${q}`);
 	}

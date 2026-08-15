@@ -1,10 +1,17 @@
-import { CommitAuthor, TreeEntry } from "../utils/types";
+import type { components } from "@octokit/openapi-types";
+import type { CommitAuthor, TreeEntry } from "../utils/types";
 
 /**
  * Generic interface for a gateway that interacts with version control systems
  * (GitHub, GitLab, Bitbucket, etc.)
  */
 export interface GitProvider {
+	defaults: {
+		baseUrl: string;
+		commitAuthor: CommitAuthor;
+		branch: string;
+	};
+
 	/**
 	 * Low-level method to make HTTP requests.
 	 * @param path Relative path to the specific gateway endpoint (e.g., "/git/refs").
@@ -22,7 +29,9 @@ export interface GitProvider {
 	 * Retrieves information about a branch.
 	 * @param branch Branch name (defaults to the one used during construction).
 	 */
-	getBranch(branch?: string): Promise<any>;
+	getBranch(
+		branch?: string,
+	): Promise<components["schemas"]["branch-with-protection"]>;
 
 	/**
 	 * Retrieves a reference (tag, branch) by its name.
@@ -56,14 +65,17 @@ export interface GitProvider {
 	 * @param sha Blob hash.
 	 * @returns Object containing content and encoding.
 	 */
-	getBlob(sha: string): Promise<{ content: string; encoding: string }>;
+	getBlob(sha: string): Promise<components["schemas"]["blob"]>;
 
 	/**
 	 * Creates a new blob.
 	 * @param content Content (encoded).
 	 * @param encoding "base64" or "utf-8".
 	 */
-	createBlob(content: string, encoding?: "base64" | "utf-8"): Promise<any>;
+	createBlob(
+		content: string,
+		encoding?: "base64" | "utf-8",
+	): Promise<components["schemas"]["short-blob"]>;
 
 	/**
 	 * Retrieves a tree by its reference (SHA or branch:path).
@@ -91,7 +103,7 @@ export interface GitProvider {
 		treeSha: string,
 		parents: string[],
 		author?: CommitAuthor,
-	): Promise<any>;
+	): Promise<components["schemas"]["commit"]>;
 
 	/**
 	 * Retrieves a file's content as text.
