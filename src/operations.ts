@@ -1,7 +1,7 @@
-import type { FileEntry, PersistOptions, TreeEntry } from "./utils/types.ts";
+import type { GitProvider } from "./git/_provider.ts";
 import { bufferToBase64, utf8ToBase64 } from "./utils/base64.ts";
 import { GatewayError } from "./utils/errors.ts";
-import { GitProvider } from "./git/_provider.ts";
+import type { FileEntry, PersistOptions, TreeEntry } from "./utils/types.ts";
 
 const MAX_RETRIES = 3;
 
@@ -34,7 +34,7 @@ export class OperationsProvider {
 		deletePaths: string[],
 		options: PersistOptions,
 	): Promise<void> {
-		const branch = options.branch;
+		const branch = options.branch || this.git.defaults.branch;
 
 		const treeEntries: TreeEntry[] = [];
 
